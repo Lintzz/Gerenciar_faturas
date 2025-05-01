@@ -10,7 +10,7 @@ def setup_storage():
         raise EnvironmentError("Não consegui ler %APPDATA%")
     storage_dir = Path(appdata) / 'projetoFatura'
     storage_dir.mkdir(parents=True, exist_ok=True)
-    for fname in ('pagina.txt', 'formatado.csv', 'formatado_limpo.csv','gastos.db'):
+    for fname in ('pagina.txt', 'formatado.csv', 'formatado_limpo.csv'):
         (storage_dir / fname).touch(exist_ok=True)
     return storage_dir
 

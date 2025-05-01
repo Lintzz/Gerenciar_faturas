@@ -2,33 +2,32 @@ import sqlite3
 import csv
 from config import STORAGE_DIR
 
-gasto_bd = STORAGE_DIR / 'gastos.db'
-
-
-def criar_tabela_gastos(banco=gasto_bd):
-    conn = sqlite3.connect(banco)
+def criar_db_e_tabela(ano, mes):
+    nome_db = STORAGE_DIR / f"fatura_{ano}.db"
+    conn = sqlite3.connect(nome_db)
     cursor = conn.cursor()
 
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS gastos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        data TEXT,
-        descricao TEXT,
-        valor REAL,
-        categoria TEXT
-    )
+    cursor.execute(f'''
+        CREATE TABLE IF NOT EXISTS {mes} (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            data TEXT,
+            descricao TEXT,
+            valor REAL,
+            categoria TEXT
+        )
     ''')
 
     conn.commit()
     conn.close()
 
-def importar_csv_para_sqlite(caminho_csv=None, banco=gasto_bd):
+def importar_csv_para_sqlite(ano, mes, caminho_csv=None):
     if caminho_csv is None:
         caminho_csv = STORAGE_DIR / 'formatado_limpo.csv'
 
-    criar_tabela_gastos(banco)  # Garante que a tabela existe
+    criar_db_e_tabela(ano, mes)
 
-    conn = sqlite3.connect(banco)
+    banco_path = STORAGE_DIR / f"fatura_{ano}.db"
+    conn = sqlite3.connect(banco_path)
     cursor = conn.cursor()
 
     def converter_valor(valor_str):
@@ -41,9 +40,9 @@ def importar_csv_para_sqlite(caminho_csv=None, banco=gasto_bd):
                 continue
             data, descricao, valor_str, categoria = linha
             valor = converter_valor(valor_str)
-            cursor.execute('''
-            INSERT INTO gastos (data, descricao, valor, categoria)
-            VALUES (?, ?, ?, ?)
+            cursor.execute(f'''
+                INSERT INTO "{mes}" (data, descricao, valor, categoria)
+                VALUES (?, ?, ?, ?)
             ''', (data, descricao, valor, categoria))
 
     conn.commit()
