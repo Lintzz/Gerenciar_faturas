@@ -126,9 +126,23 @@ def editar():
         edit_window = Toplevel()
         edit_window.title("Editar Item")
         edit_window.geometry("670x90")
+
+        edit_window.geometry("670x90") 
+
+        largura_tela = edit_window.winfo_screenwidth()
+        altura_tela = edit_window.winfo_screenheight()
+
+        largura_edit_window = 670
+        altura_edit_window = 90
+
+        x = (largura_tela // 2) - (largura_edit_window // 2)
+        y = (altura_tela // 2) - (altura_edit_window // 2) - 395  # Subir 50 pixels
+
+        edit_window.geometry(f"{largura_edit_window}x{altura_edit_window}+{x}+{y}")
+
         edit_window.configure(bg="#2e2e2e")
 
-        botao_dataa = ctk.CTkButton(edit_window, width=100, text=f"Data: {data_atual}", command=abrir_calendario)
+        botao_dataa = ctk.CTkButton(edit_window, width=100, text=f"Data: {data_atual}", command=lambda: abrir_calendario(botao_dataa))
         botao_dataa.place(x=80, y=10)
 
         nome = ctk.CTkEntry(edit_window, width=200, placeholder_text=nome_atual)
@@ -174,15 +188,14 @@ def editar():
     except Exception as e:
         messagebox.showinfo(title="ERRO", message=f"Ocorreu um erro ao editar: {e}") 
 
-def abrir_calendario():
+def abrir_calendario(botao):
     global data_selecionada
-    global botao_dataa
     top = tk.Toplevel(janela)
     top.configure(bg="#2d2d2d")
     top.grab_set()
     top.title("Selecionar Data")
-    x = botao_data.winfo_rootx()
-    y = botao_data.winfo_rooty() + botao_data.winfo_height()
+    x = botao.winfo_rootx()
+    y = botao.winfo_rooty() + botao.winfo_height()
     top.geometry(f"+{x}+{y}")
 
     calendario = Calendar(
@@ -220,12 +233,7 @@ def abrir_calendario():
         for mes_ingles, mes_portugues in meses_abreviados.items():
             data_selecionada = data_selecionada.replace(mes_ingles, mes_portugues)
 
-        botao_data.configure(text=f"Data: {data_selecionada}")
-
-        try:
-            botao_dataa.configure(text=f"Data: {data_selecionada}")
-        except NameError:
-            pass 
+        botao.configure(text=f"Data: {data_selecionada}")
 
         top.destroy()
 
@@ -436,7 +444,6 @@ def ctkimage_from_b64(b64_string, size=(20,20)):
     pil_img = Image.open(BytesIO(data))
     return ctk.CTkImage(pil_img, size=size)
 
-# Dicionário para guardar a ordem de cada coluna
 ordem_colunas = {}
 MESES_PT = {
     "JAN": 1, "FEV": 2, "MAR": 3, "ABR": 4,
@@ -498,96 +505,136 @@ icon_path = config.obter_icone_path()
 
 criar_tabela_gastos()
 
-#INICO 
-janela = ctk.CTk()
-janela.geometry("670x480")
-janela.title("Fatura")
-janela.configure(fg_color="#2e2e2e")
+def abrir_janela_principal(janela):
+    global botao_data,nome,preco,categoria,bnt,bnt2,bnt3,bnt4,tv,pesquisa,Filtro_categoria,bnt_grafico1,bnt_grafico2,bnt_pesquisa
+
+    janela.deiconify()
+    janela.resizable(width=False, height=False)
+    janela.iconbitmap(icon_path)
+    janela.protocol("WM_DELETE_WINDOW", fechar_tudo)
+
+    #botao data
+    botao_data = ctk.CTkButton(janela, width=100, text="Escolher Data", command=lambda: abrir_calendario(botao_data))
+    botao_data.place(x=80, y=10)
+
+    #input nome
+    nome = ctk.CTkEntry(janela, width=200, placeholder_text='Nome')
+    nome.place(x=190, y=10)
+
+    #input preco
+    preco = ctk.CTkEntry(janela,width=90, placeholder_text='preco')
+    preco.place(x=400, y=10)
+
+    #input categoria
+    categoria = ctk.CTkOptionMenu(janela,width=90, values=["Assinaturas","Compras","Transporte","Saúde","Alimentação","Celular","Casa","Outro"])
+    categoria.place(x=500, y=10)
+    categoria.set('Categorias')
+
+    #botao adicionar
+    bnt = ctk.CTkButton(janela, image=image_2, text="Add Items  ", width=100, height=10, compound="right", anchor="e", font= ('Arial', 12), fg_color='#D2122E', hover_color="#7C0A02", command=enviar)
+    bnt.place(x=170, y=50)
+
+    #botao file
+    bnt2 = ctk.CTkButton(janela, image=image_1, text="Add Folder  ", width=100, height=10, compound="right", anchor="e", font= ('Arial', 12), command=arquivoPdf)
+    bnt2.place(x=280, y=50)
+
+    #botao apagar
+    bnt3 = ctk.CTkButton(janela, image=image_3, text="Apagar  ", width=100, height=10, compound="right", anchor="e", font= ('Arial', 12), fg_color='#D2122E', hover_color="#7C0A02", command=deletar)
+    bnt3.place(x=395, y=50)
+
+    #botao apagar
+    bnt4 = ctk.CTkButton(janela, image=image_3, text="Editar  ", width=100, height=10, compound="right", anchor="e", font= ('Arial', 12), fg_color='#D2122E', hover_color="#7C0A02", command=editar)
+    bnt4.place(x=505, y=50)
+
+    #style tabela
+    style = ttk.Style()
+    style.theme_use("default")
+    style.configure("Treeview", background="#2e2e2e", foreground="white", fieldbackground="#2e2e2e", rowheight=25, borderwidth=0, relief="flat")        
+    style.map("Treeview", background=[("selected", "#4a6984")], foreground=[("selected", "white")])
+    style.configure("Treeview.Heading", background="#2e2e2e", foreground="white", font=("Segoe UI", 10, "bold"), borderwidth=0, relief="flat")       
+    style.map("Treeview.Heading", background=[('active', style.lookup('Treeview.Heading', 'background'))], relief=[('active', 'flat')])
+    style.configure("Vertical.TScrollbar", background="#444444", troughcolor="#2e2e2e", bordercolor="#2e2e2e", arrowcolor="white")         
+
+    #frame tablea
+    frame = tk.Frame(janela,width=520, height=300,bg="#2e2e2e")
+    frame.place(x=75, y=90)
+
+    # Tabela
+    tv = ttk.Treeview(frame, columns=('data', 'nome', 'preco', 'categoria'), show='headings')
+    tv.column('data', minwidth=0, width=50)
+    tv.column('nome', minwidth=0, width=100)
+    tv.column('preco', minwidth=0, width=80)
+    tv.column('categoria', minwidth=0, width=50)
+
+    tv.heading("data", text=" Data", anchor='w', command=lambda: ordenar_coluna(tv, "data"))
+    tv.heading("nome", text=" Nome", anchor='w', command=lambda: ordenar_coluna(tv, "nome"))
+    tv.heading("preco", text=" Preço", anchor='w', command=lambda: ordenar_coluna(tv, "preco"))
+    tv.heading("categoria", text=" Categoria", anchor='w', command=lambda: ordenar_coluna(tv, "categoria"))
+
+    tv.place(relx=0, rely=0, relwidth=1, relheight=1)
+
+    scrollbar = ctk.CTkScrollbar(frame, orientation="vertical", command=tv.yview)
+    scrollbar.place(relx=1.0, rely=0, relheight=1, anchor="ne", x=-2, y=10)
+    tv.configure(yscrollcommand=scrollbar.set)
+
+    carregar_dados_no_treeview()
+
+    Filtro_categoria = ctk.CTkOptionMenu(janela,width=110, values=["All","Assinaturas","Compras","Transporte","Saúde","Alimentação","Celular","Casa","Outro"])
+    Filtro_categoria.place(x=158, y=400)
+    Filtro_categoria.set('All')
+
+    pesquisa = ctk.CTkEntry(janela, width=200, placeholder_text='Pesquisa')
+    pesquisa.place(x=278, y=400)
+
+    bnt_pesquisa = ctk.CTkButton(janela, image=image_4, text="", width=25, height=25, compound="right", anchor="e", font= ('Arial', 12), command=pesquisar)
+    bnt_pesquisa.place(x=488, y=400)
+
+    bnt_grafico1 = ctk.CTkButton(janela, text="Exibir Gráfico Mensal", width =150, command=mostrar_grafico1)
+    bnt_grafico1.place(x=188, y=440)
+
+    bnt_grafico2 = ctk.CTkButton(janela, text="Exibir Gráfico Anual", width =150, command=mostrar_grafico2)
+    bnt_grafico2.place(x=350, y=440)
+
+def mostrar_splash(janela):
+    splash = ctk.CTkToplevel(janela)
+    splash.geometry("300x150")
+    splash.title("Carregando...")
+    splash.overrideredirect(True)
+
+    label = ctk.CTkLabel(splash, text="Carregando...", font=("Arial", 18))
+    label.pack(expand=True)
+
+    # Centralizar splash
+    splash.update_idletasks()
+    x = (splash.winfo_screenwidth() // 2) - 150
+    y = (splash.winfo_screenheight() // 2) - 75
+    splash.geometry(f"+{x}+{y}")
+
+    def finalizar():
+        splash.withdraw()
+        splash.destroy()
+        abrir_janela_principal(janela)
+
+    splash.after(2000, finalizar)
+
 ctk.set_default_color_theme("green")
-janela.resizable(width=False, height=False)
-janela.iconbitmap(icon_path)
-janela.protocol("WM_DELETE_WINDOW", fechar_tudo)
+ctk.set_appearance_mode('dark')
 
-#botao data
-botao_data = ctk.CTkButton(janela, width=100, text="Escolher Data", command=abrir_calendario)
-botao_data.place(x=80, y=10)
+janela = ctk.CTk()
+janela.withdraw() 
 
-#input nome
-nome = ctk.CTkEntry(janela, width=200, placeholder_text='Nome')
-nome.place(x=190, y=10)
+janela.configure(fg_color="#2e2e2e")
+janela.geometry("670x480")
 
-#input preco
-preco = ctk.CTkEntry(janela,width=90, placeholder_text='preco')
-preco.place(x=400, y=10)
+largura_janela = 670
+altura_janela = 480
+largura_tela = janela.winfo_screenwidth()
+altura_tela = janela.winfo_screenheight()
+x = (largura_tela // 2) - (largura_janela // 2)
+y = (altura_tela // 2) - (altura_janela // 2) - 200
+janela.geometry(f"{largura_janela}x{altura_janela}+{x}+{y}")
 
-#input categoria
-categoria = ctk.CTkOptionMenu(janela,width=90, values=["Assinaturas","Compras","Transporte","Saúde","Alimentação","Celular","Casa","Outro"])
-categoria.place(x=500, y=10)
-categoria.set('Categorias')
+janela.title("Fatura")
 
-#botao adicionar
-bnt = ctk.CTkButton(janela, image=image_2, text="Add Items  ", width=100, height=10, compound="right", anchor="e", font= ('Arial', 12), fg_color='#D2122E', hover_color="#7C0A02", command=enviar)
-bnt.place(x=170, y=50)
-
-#botao file
-bnt2 = ctk.CTkButton(janela, image=image_1, text="Add Folder  ", width=100, height=10, compound="right", anchor="e", font= ('Arial', 12), command=arquivoPdf)
-bnt2.place(x=280, y=50)
-
-#botao apagar
-bnt3 = ctk.CTkButton(janela, image=image_3, text="Apagar  ", width=100, height=10, compound="right", anchor="e", font= ('Arial', 12), fg_color='#D2122E', hover_color="#7C0A02", command=deletar)
-bnt3.place(x=395, y=50)
-
-#botao apagar
-bnt4 = ctk.CTkButton(janela, image=image_3, text="Editar  ", width=100, height=10, compound="right", anchor="e", font= ('Arial', 12), fg_color='#D2122E', hover_color="#7C0A02", command=editar)
-bnt4.place(x=505, y=50)
-
-#style tabela
-style = ttk.Style()
-style.theme_use("default")
-style.configure("Treeview", background="#2e2e2e", foreground="white", fieldbackground="#2e2e2e", rowheight=25, borderwidth=0, relief="flat")        
-style.map("Treeview", background=[("selected", "#4a6984")], foreground=[("selected", "white")])
-style.configure("Treeview.Heading", background="#2e2e2e", foreground="white", font=("Segoe UI", 10, "bold"), borderwidth=0, relief="flat")       
-style.map("Treeview.Heading", background=[('active', style.lookup('Treeview.Heading', 'background'))], relief=[('active', 'flat')])
-style.configure("Vertical.TScrollbar", background="#444444", troughcolor="#2e2e2e", bordercolor="#2e2e2e", arrowcolor="white")         
-
-#frame tablea
-frame = tk.Frame(janela,width=520, height=300,bg="#2e2e2e")
-frame.place(x=75, y=90)
-
-# Tabela
-tv = ttk.Treeview(frame, columns=('data', 'nome', 'preco', 'categoria'), show='headings')
-tv.column('data', minwidth=0, width=50)
-tv.column('nome', minwidth=0, width=100)
-tv.column('preco', minwidth=0, width=80)
-tv.column('categoria', minwidth=0, width=50)
-
-tv.heading("data", text=" Data", anchor='w', command=lambda: ordenar_coluna(tv, "data"))
-tv.heading("nome", text=" Nome", anchor='w', command=lambda: ordenar_coluna(tv, "nome"))
-tv.heading("preco", text=" Preço", anchor='w', command=lambda: ordenar_coluna(tv, "preco"))
-tv.heading("categoria", text=" Categoria", anchor='w', command=lambda: ordenar_coluna(tv, "categoria"))
-
-tv.place(relx=0, rely=0, relwidth=1, relheight=1)
-
-scrollbar = ctk.CTkScrollbar(frame, orientation="vertical", command=tv.yview)
-scrollbar.place(relx=1.0, rely=0, relheight=1, anchor="ne", x=-2, y=10)
-tv.configure(yscrollcommand=scrollbar.set)
-
-carregar_dados_no_treeview()
-
-Filtro_categoria = ctk.CTkOptionMenu(janela,width=110, values=["All","Assinaturas","Compras","Transporte","Saúde","Alimentação","Celular","Casa","Outro"])
-Filtro_categoria.place(x=158, y=400)
-Filtro_categoria.set('All')
-
-pesquisa = ctk.CTkEntry(janela, width=200, placeholder_text='Pesquisa')
-pesquisa.place(x=278, y=400)
-
-bnt_pesquisa = ctk.CTkButton(janela, image=image_4, text="", width=25, height=25, compound="right", anchor="e", font= ('Arial', 12), command=pesquisar)
-bnt_pesquisa.place(x=488, y=400)
-
-bnt_grafico1 = ctk.CTkButton(janela, text="Exibir Gráfico Mensal", width =150, command=mostrar_grafico1)
-bnt_grafico1.place(x=188, y=440)
-
-bnt_grafico2 = ctk.CTkButton(janela, text="Exibir Gráfico Anual", width =150, command=mostrar_grafico2)
-bnt_grafico2.place(x=350, y=440)
-
+mostrar_splash(janela)
 janela.mainloop()
