@@ -146,7 +146,9 @@ def abrir_frame_editar():
     
 
     # Preenche os campos com valores atuais
-    botao_dataa.configure(text=f"{data_atual}")
+    data_selecionada = data_atual
+    botao_dataa.configure(text=f"{data_selecionada}")
+    
     entry_nome.delete(0, "end")
     entry_nome.insert(0, nome_atual)
     entry_preco.delete(0, "end")
