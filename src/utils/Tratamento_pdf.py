@@ -2,7 +2,7 @@ import re
 from PyPDF2 import PdfReader
 import csv
 
-from config import STORAGE_DIR
+from config.config import STORAGE_DIR
 
 txt_pagina = STORAGE_DIR / 'pagina.txt'
 csv_formatado = STORAGE_DIR / 'formatado.csv'

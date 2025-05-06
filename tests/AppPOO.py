@@ -29,16 +29,16 @@ class App(ctk.CTk):
     def __init__(self, icon_path):
         super().__init__()
 
+        self.config_ano = ctk.StringVar(value="2025")
+        self.config_mes = ctk.StringVar(value="JAN")
+
+        self.graficos = Graficos(self)
+
         self.STORAGE_DIR = Path("C:/Users/Alexa/AppData/Roaming/projetoFatura")
 
         self.data_selecionada = ""
-
-        self.image_1 = self.ctkimage_from_b64(add_file_b64, size=(20, 20))
-        self.image_2 = self.ctkimage_from_b64(add_b64, size=(20, 20))
-        self.image_3 = self.ctkimage_from_b64(backspace_b64, size=(20, 20))
-        self.image_4 = self.ctkimage_from_b64(lupa_b64, size=(20, 20))
-        self.image_5 = self.ctkimage_from_b64(lixo_b65, size=(20, 20))
-        self.image_6 = self.ctkimage_from_b64(pena_b64, size=(20, 20))
+        
+        self.carregar_imagens()
 
         self.icon_path = icon_path
         self.title("Fatura")
@@ -47,10 +47,14 @@ class App(ctk.CTk):
         self.configure(fg_color="#252524")
         self.iconbitmap(self.icon_path)
 
-        self.center_window()
+        self.frame_adicionar = FrameAdicionarManager(self, app=self)
+
+        self.centralizar_janela()
         self.withdraw()
         self.mostrar_splash()
 
+        self.criar_frame_editar()
+        
         self.canvas = None
         self.mostrar1 = False
         self.mostrar2 = False
@@ -62,12 +66,111 @@ class App(ctk.CTk):
             "SET": 9, "OUT": 10, "NOV": 11, "DEZ": 12
         }
 
-    def ctkimage_from_b64(self, b64_string, size=(20,20)):
-        data = base64.b64decode(b64_string)
-        pil_img = Image.open(BytesIO(data))
-        return ctk.CTkImage(pil_img, size=size)
+    def carregar_imagens(self):
+        self.image_1 = Utilitarios.converter_b64(add_file_b64, size=(20, 20))
+        self.image_2 = Utilitarios.converter_b64(add_b64, size=(20, 20))
+        self.image_3 = Utilitarios.converter_b64(backspace_b64, size=(20, 20))
+        self.image_4 = Utilitarios.converter_b64(lupa_b64, size=(20, 20))
+        self.image_5 = Utilitarios.converter_b64(lixo_b65, size=(20, 20))
+        self.image_6 = Utilitarios.converter_b64(pena_b64, size=(20, 20))
 
-    def center_window(self):
+
+
+    def carregar_dados_tabela(self):
+        ano = self.config_ano.get()
+        mes = f"{self.config_mes.get()}_MES"
+        banco_path = self.STORAGE_DIR / f"fatura_{ano}.db"
+
+        conn = sqlite3.connect(banco_path)
+        cursor = conn.cursor()
+
+        cursor.execute(f'''
+            CREATE TABLE IF NOT EXISTS {mes} (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                data TEXT,
+                descricao TEXT,
+                valor REAL,
+                categoria TEXT
+            )
+        ''')
+
+        for item in self.tv.get_children():
+            self.tv.delete(item)
+
+        cursor.execute(f"SELECT id, data, descricao, valor, categoria FROM {mes}")
+        for linha in cursor.fetchall():
+            id_registro = linha[0]
+            valor_formatado = f"R$ {float(linha[3]):.2f}".replace('.', ',')
+            self.tv.insert("", "end", iid=id_registro, values=(linha[1], linha[2], valor_formatado, linha[4]))
+        
+        self.ordenar_coluna(self.tv, "data")
+
+        conn.close()
+
+    def dados_db(self):
+        ano = self.config_ano.get()
+        mes = f"{self.config_mes.get()}_MES"
+        banco_path = self.STORAGE_DIR / f"fatura_{ano}.db"
+
+        conn = sqlite3.connect(banco_path)
+        cursor = conn.cursor()
+
+        cursor.execute(f"SELECT data, descricao, valor, categoria FROM {mes}")
+        dados = cursor.fetchall()
+
+        conn.close()
+
+        return [
+            {
+                "data": d[0],
+                "nome": d[1],
+                "preco": f"R$ {d[2]:.2f}".replace('.', ','),
+                "categoria": d[3]
+            } for d in dados
+        ]
+    
+    
+    def pesquisar(self):
+        dadosdb = self.dados_db()
+        texto_pesquisa = self.pesquisa.get().lower()
+        categoria_filtro = self.Filtro_categoria.get()
+
+        for item in self.tv.get_children():
+            self.tv.delete(item)
+
+        for item in dadosdb:
+            nome_pesquisa = texto_pesquisa in item["nome"].lower()
+            categoria_pesquisa = (categoria_filtro == "Todos" or item["categoria"] == categoria_filtro)
+
+            if nome_pesquisa and categoria_pesquisa:
+                self.tv.insert("", "end", values=(item["data"], item["nome"], item["preco"], item["categoria"]))
+
+    def ordenar_coluna(self, tv, col):
+        reverso = self.ordem_colunas.get(col, False)
+
+        def parse(valor):
+            if col == "preco":
+                return float(valor.replace("R$", "").replace(".", "").replace(",", "."))
+            elif col == "data":
+                try:
+                    dia, mes = valor.strip().split()
+                    return datetime(2025, self.MESES_PT[mes.upper()], int(dia))
+                except:
+                    return datetime.min
+            else:
+                return valor.lower()
+
+        dados = [(parse(tv.set(k, col)), k) for k in tv.get_children("")]
+        dados.sort(reverse=reverso)
+
+        for index, (_, k) in enumerate(dados):
+            tv.move(k, "", index)
+
+        self.ordem_colunas[col] = not reverso
+
+
+class JanelaManager:
+    def centralizar_janela(self):
         largura_janela = 670
         altura_janela = 480
         largura_tela = self.winfo_screenwidth()
@@ -93,16 +196,12 @@ class App(ctk.CTk):
         def finalizar():
             splash.withdraw()
             splash.destroy()
-            self.abrir_janela_principal()
+            self.mostrar_janela_principal()
 
         splash.after(2000, finalizar)
 
-    def abrir_janela_principal(self):
+    def mostrar_janela_principal(self):
         self.deiconify()
-
-        self.criar_frame_editar()
-        
-        self.canvas_blur = Canvas(self, width=500, height=400, highlightthickness=0)
 
         self.config_ano = ctk.CTkOptionMenu(
             self,
@@ -114,7 +213,7 @@ class App(ctk.CTk):
             button_hover_color="#555555",
             dropdown_fg_color="#2b2b2b",
             dropdown_text_color="white",
-            command= self.atualizar_config
+            command= self.filtrar_ano_mes
         )
         self.config_ano.set("2025")
         self.config_ano.place(x=230, y=10)
@@ -129,14 +228,247 @@ class App(ctk.CTk):
             button_hover_color="#555555",
             dropdown_fg_color="#2b2b2b",
             dropdown_text_color="white",
-            command=self.atualizar_config
+            command=self.filtrar_ano_mes
         )
         self.config_mes.set("JAN")
         self.config_mes.place(x=345, y=10)
 
         #botao adicionar
-        self.bnt = ctk.CTkButton(self, image=self.image_2, text="Add Items  ", width=100, height=10, compound="right", anchor="e", font= ('Arial', 12), command=self.adicionar_frameAdd)
+        self.bnt = ctk.CTkButton(self, image=self.image_2, text="Add Items  ", width=100, height=10, compound="right", anchor="e", font= ('Arial', 12), command=self.frame_adicionar.abrir_frame_adicionar)
         self.bnt.place(x=120, y=50)
+
+        #botao file
+        self.bnt2 = ctk.CTkButton( self, image= self.image_1, text="Add Folder  ", width=100, height=10, compound="right", anchor="e", font= ('Arial', 12), command= self.inserir_arquivo)
+        self.bnt2.place(x=230, y=50)
+
+        #botao apagar
+        self.bnt3 = ctk.CTkButton(self, image= self.image_5, text="Apagar  ", width=100, height=10, compound="right", anchor="e", font= ('Arial', 12), fg_color='#252524', hover_color="#3A3A3A",border_width=1,border_color="#3A3A3A", command= self.deletar_item)
+        self.bnt3.place(x=345, y=50)
+
+        
+
+        #botao editar ---------
+        self.bnt4 = ctk.CTkButton(self, image= self.image_6, text="Editar  ", width=100, height=10, compound="right", anchor="e", font= ('Arial', 12),fg_color='#252524', hover_color="#3A3A3A",border_width=1,border_color="#3A3A3A", command= self.abrir_frame_editar)
+        self.bnt4.place(x=455, y=50)
+
+        #style tabela
+        self.style = ttk.Style()
+        self.style.theme_use("default")
+        self.style.configure("Treeview", background="#252524", foreground="white", fieldbackground="#252524", rowheight=25, borderwidth=0, relief="flat",highlightthickness=0)        
+        self.style.map("Treeview", background=[("selected", "#444444")], foreground=[("selected", "white")])
+        self.style.configure("Treeview.Heading", background="#252524", foreground="white", font=("Segoe UI", 10, "bold"), borderwidth=0, relief="flat")       
+        self.style.map("Treeview.Heading", background=[('active',  self.style.lookup('Treeview.Heading', 'background'))], relief=[('active', 'flat')])
+        self.style.configure("Vertical.TScrollbar", background="#444444", troughcolor="#252524", bordercolor="#252524", arrowcolor="white")         
+
+        #frame tablea
+        self.frame = tk.Frame(self, bg="#252524")
+        self.frame.place(x=75, y=90, width=520, height=300)
+
+        self.scrollbar = ctk.CTkScrollbar(self.frame, orientation="vertical")
+
+        # Tabela
+        self.tv = ttk.Treeview(
+            self.frame,
+            columns=('data', 'nome', 'preco', 'categoria'),
+            show='headings',
+            yscrollcommand=self.scrollbar.set
+        )
+        self.tv.pack(side="left", fill="both", expand=True)
+        self.tv.column('data', minwidth=0, width=50)
+        self.tv.column('nome', minwidth=0, width=100)
+        self.tv.column('preco', minwidth=0, width=80)
+        self.tv.column('categoria', minwidth=0, width=50)
+
+        self.tv.heading("data", text=" Data", anchor='w', command=lambda: self.ordenar_coluna( self.tv, "data"))
+        self.tv.heading("nome", text=" Nome", anchor='w', command=lambda: self.ordenar_coluna( self.tv, "nome"))
+        self.tv.heading("preco", text=" Preço", anchor='w', command=lambda: self.ordenar_coluna( self.tv, "preco"))
+        self.tv.heading("categoria", text=" Categoria", anchor='w', command=lambda: self.ordenar_coluna( self.tv, "categoria"))
+
+        
+        self.scrollbar.configure(command=self.tv.yview)
+        self.scrollbar.pack(side="right", fill="y")
+
+        self.carregar_dados_tabela()
+
+        self.Filtro_categoria = ctk.CTkOptionMenu(self,width=110, values=["Todos","Assinaturas","Compras","Transporte","Saúde","Alimentação","Celular","Casa","Outro"])
+        self.Filtro_categoria.place(x=158, y=400)
+        self.Filtro_categoria.set('Todos')
+
+        self.pesquisa = ctk.CTkEntry(self, width=200, placeholder_text='Pesquisa',fg_color="#252524", border_color="#3A3A3A",border_width=2)
+        self.pesquisa.place(x=278, y=400)
+
+        self.bnt_pesquisa = ctk.CTkButton(self, image= self.image_4, text="", width=25, height=25, compound="right", anchor="e", font= ('Arial', 12), command=self.pesquisar)
+        self.bnt_pesquisa.place(x=488, y=400)
+
+        self.bnt_grafico1 = ctk.CTkButton(self, text="Exibir Gráfico Mensal", width =150, command=self.mostrar_grafico1)
+        self.bnt_grafico1.place(x=188, y=440)
+
+        self.bnt_grafico2 = ctk.CTkButton(self, text="Exibir Gráfico Anual", width =150, command=self.mostrar_grafico2)
+        self.bnt_grafico2.place(x=350, y=440)
+
+class TabelaManager:
+    def filtrar_ano_mes(self, _=None):
+        ano = self.config_ano.get()
+        mes = f"{self.config_mes.get()}_MES"
+        criar_db_e_tabela(ano, mes)
+        self.carregar_dados_tabela()
+        self.graficos.grafico1()
+
+    def inserir_item(self):
+        nomeget = self.frame_adicionar.nome.get()
+        precoget = self.frame_adicionar.preco.get()
+        categoriaget = self.frame_adicionar.categoria.get()
+
+        if self.data_selecionada == "" or nomeget == "" or precoget == "" or categoriaget == "Categorias":
+            messagebox.showinfo(title="ERRO", message="Digite todos os dados")
+        else:
+            try:
+                # Converte o valor para float (substitui vírgula por ponto)
+                valor_float = float(precoget.replace(",", "."))
+            except ValueError:
+                messagebox.showinfo(title="ERRO", message="Preço inválido")
+                return
+
+            ano = self.config_ano.get()
+            mes = f"{self.config_mes.get()}_MES"
+            banco_path = STORAGE_DIR / f"fatura_{ano}.db"
+
+            conn = sqlite3.connect(banco_path)
+            cursor = conn.cursor()
+            cursor.execute(f'''
+                INSERT INTO {mes} (data, descricao, valor, categoria)
+                VALUES (?, ?, ?, ?)
+            ''', (self.data_selecionada, nomeget, valor_float, categoriaget))
+            conn.commit()
+            conn.close()
+
+            # Limpa os campos
+            self.nome.delete(0, END)
+            self.preco.delete(0, END)
+            self.categoria.set("Categorias")
+            self.botao_data.configure(text="Escolher Data")
+
+            # Atualiza a Treeview com os dados do banco
+            self.tv.delete(*self.tv.get_children())
+            self.carregar_dados_tabela()
+
+            self.fechar_frame_adicionar()
+            # Atualiza gráficos
+            self.graficos.grafico1
+
+    def inserir_arquivo(self):
+        ano = self.config_ano.get()
+        mes = f"{self.config_mes.get()}_MES"
+
+        caminho = filedialog.askopenfilename(
+            title="Selecione um arquivo PDF",
+            filetypes=[("Arquivos PDF", "*.pdf"), ("Todos os Arquivos", "*.*")]
+        )
+
+        if not caminho:
+            return  # ← Usuário cancelou
+
+        Tratamento_pdf.processarpdfnubank(caminho)
+
+        self.tv.delete(*self.tv.get_children())
+
+        try:
+            importar_csv_para_sqlite(ano, mes)
+            self.carregar_dados_tabela()
+        except Exception as e:
+            messagebox.showerror(title="Erro", message=f"Ocorreu um erro: {e}")
+
+        self.grafico1()
+
+    def deletar_item(self):
+        try:
+            itemSelecionado = self.tv.selection()
+
+            if not itemSelecionado:
+                messagebox.showinfo(title="ERRO", message="Selecione ao menos um item para deletar")
+                return
+
+            ano = self.config_ano.get()
+            mes = f"{self.config_mes.get()}_MES"
+            banco_path = STORAGE_DIR / f"fatura_{ano}.db"
+
+            conn = sqlite3.connect(banco_path)
+            cursor = conn.cursor()
+
+            for item_id in itemSelecionado:
+                cursor.execute(f"DELETE FROM {mes} WHERE id = ?", (item_id,))
+                self.tv.delete(item_id)
+
+            conn.commit()
+            conn.close()
+
+        except Exception as e:
+            messagebox.showinfo(title="ERRO", message=f"Ocorreu um erro ao deletar: {e}")
+
+        self.graficos.grafico1()
+
+    def editar_item(self):
+            novo_nome = self.entry_nome.get()
+            novo_valor = self.entry_preco.get().replace(',', '.')
+            novo_categoria = self.menu_categoria.get()
+
+            ano = self.config_ano.get()
+            mes = f"{self.config_mes.get()}_MES"
+            banco_path = self.STORAGE_DIR / f"fatura_{ano}.db"
+
+            try:
+                conn = sqlite3.connect(banco_path)
+                cursor = conn.cursor()
+
+                cursor.execute(f"""
+                    UPDATE {mes}
+                    SET data = ?, descricao = ?, valor = ?, categoria = ?
+                    WHERE id = ?
+                """, (self.data_selecionada, novo_nome, novo_valor, novo_categoria, self.item_id))
+
+                conn.commit()
+                conn.close()
+
+                self.tv.item(self.item_id, values=(
+                    self.data_selecionada,
+                    novo_nome,
+                    f"R$ {novo_valor}",
+                    novo_categoria
+                ))
+
+                self.fechar_frame_editar()
+
+            except Exception as e:
+                messagebox.showerror("Erro ao salvar", f"Ocorreu um erro ao salvar a edição: {e}")
+
+
+class FrameBase(ctk.CTkFrame):
+    def aplicar_blur(self):
+        self.master.update_idletasks()
+        x = self.master.winfo_rootx()
+        y = self.master.winfo_rooty()
+        largura = self.master.winfo_width()
+        altura = self.master.winfo_height()
+
+        image = ImageGrab.grab(bbox=(x, y, x + largura, y + altura))
+        image_blur = image.filter(ImageFilter.GaussianBlur(radius=5))
+
+        buf = io.BytesIO()
+        image_blur.save(buf, format="PNG")
+        buf.seek(0)
+        img = PhotoImage(data=buf.read())
+
+        return img
+
+class FrameAdicionarManager(FrameBase):
+    def __init__(self, master, app, **kwargs):
+        super().__init__(master, **kwargs)
+        self.app = app
+
+        self.canvas_blur = Canvas(self, width=500, height=400, highlightthickness=0)
+        self.criar_frame_adicionar()
+
+    def criar_frame_adicionar(self):
 
         self.frame_borda_adicionar = ctk.CTkFrame(self, fg_color="#3A3A3A",corner_radius=0) 
 
@@ -156,7 +488,7 @@ class App(ctk.CTk):
             border_width=1,     
             text_color="white",     
             hover_color="#444444",  
-            command=lambda: self.abrir_calendario( self.botao_data)
+            command=lambda: self.app.abrir_calendario(self.botao_data)
         )
         self.botao_data.grid(row=1, column=1, sticky="we", padx=(0, 20))
 
@@ -212,7 +544,7 @@ class App(ctk.CTk):
             height=30,
             font=("Arial", 14, "bold"),
             text="Cancelar",
-            command= self.fechar_frameAdd,
+            command= self.fechar_frame_adicionar,
             fg_color="#3A3A3A", 
             hover_color="#444444", 
             border_width=1, 
@@ -220,188 +552,36 @@ class App(ctk.CTk):
         )
         self.cancelar_btn.pack(side="left", padx=(20, 8))
 
-        self.salvar_btn = ctk.CTkButton( self.botoes_frame, text="Salvar",font=("Arial", 14, "bold"),width=120, height=30,command= self.enviar)
+        self.salvar_btn = ctk.CTkButton( self.botoes_frame, text="Salvar",font=("Arial", 14, "bold"),width=120, height=30,command= self.app.inserir_item)
         self.salvar_btn.pack(side="left", padx=(0, 20))
 
-        #botao file
-        self.bnt2 = ctk.CTkButton( self, image= self.image_1, text="Add Folder  ", width=100, height=10, compound="right", anchor="e", font= ('Arial', 12), command= self.arquivo_pdf)
-        self.bnt2.place(x=230, y=50)
+    def abrir_frame_adicionar(self):
+        self.master.update_idletasks()  # Atualiza o layout principal antes da captura
+        img_blur = self.aplicar_blur()  # Captura o fundo limpo (antes do place)
 
-        #botao apagar
-        self.bnt3 = ctk.CTkButton(self, image= self.image_5, text="Apagar  ", width=100, height=10, compound="right", anchor="e", font= ('Arial', 12), fg_color='#252524', hover_color="#3A3A3A",border_width=1,border_color="#3A3A3A", command= self.deletar_item)
-        self.bnt3.place(x=345, y=50)
+        self.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self.lift()
 
+        self.canvas_blur.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self.canvas_blur.create_image(0, 0, anchor="nw", image=img_blur)
+        self.canvas_blur.image = img_blur
+
+        for widget in self.winfo_children():
+            if widget not in (self.canvas_blur, self.frame_adiconar):
+                widget.lower()
+
+        self.frame_borda_adicionar.place(x=180, y=80)
+        self.frame_adiconar.pack(padx=2, pady=2)
+        self.frame_borda_adicionar.lift()
         
+    def fechar_frame_adicionar(self):
+        self.frame_borda_adicionar.place_forget()
+        self.canvas_blur.place_forget()
+        self.canvas_blur.delete("all")
+        self.place_forget()
 
-        #botao editar ---------
-        self.bnt4 = ctk.CTkButton(self, image= self.image_6, text="Editar  ", width=100, height=10, compound="right", anchor="e", font= ('Arial', 12),fg_color='#252524', hover_color="#3A3A3A",border_width=1,border_color="#3A3A3A", command= self.abrir_frame_editar)
-        self.bnt4.place(x=455, y=50)
 
-        #style tabela
-        self.style = ttk.Style()
-        self.style.theme_use("default")
-        self.style.configure("Treeview", background="#252524", foreground="white", fieldbackground="#252524", rowheight=25, borderwidth=0, relief="flat",highlightthickness=0)        
-        self.style.map("Treeview", background=[("selected", "#444444")], foreground=[("selected", "white")])
-        self.style.configure("Treeview.Heading", background="#252524", foreground="white", font=("Segoe UI", 10, "bold"), borderwidth=0, relief="flat")       
-        self.style.map("Treeview.Heading", background=[('active',  self.style.lookup('Treeview.Heading', 'background'))], relief=[('active', 'flat')])
-        self.style.configure("Vertical.TScrollbar", background="#444444", troughcolor="#252524", bordercolor="#252524", arrowcolor="white")         
-
-        #frame tablea
-        self.frame = tk.Frame(self, bg="#252524")
-        self.frame.place(x=75, y=90, width=520, height=300)
-
-        self.scrollbar = ctk.CTkScrollbar(self.frame, orientation="vertical")
-
-        # Tabela
-        self.tv = ttk.Treeview(
-            self.frame,
-            columns=('data', 'nome', 'preco', 'categoria'),
-            show='headings',
-            yscrollcommand=self.scrollbar.set
-        )
-        self.tv.pack(side="left", fill="both", expand=True)
-        self.tv.column('data', minwidth=0, width=50)
-        self.tv.column('nome', minwidth=0, width=100)
-        self.tv.column('preco', minwidth=0, width=80)
-        self.tv.column('categoria', minwidth=0, width=50)
-
-        self.tv.heading("data", text=" Data", anchor='w', command=lambda: self.ordenar_coluna( self.tv, "data"))
-        self.tv.heading("nome", text=" Nome", anchor='w', command=lambda: self.ordenar_coluna( self.tv, "nome"))
-        self.tv.heading("preco", text=" Preço", anchor='w', command=lambda: self.ordenar_coluna( self.tv, "preco"))
-        self.tv.heading("categoria", text=" Categoria", anchor='w', command=lambda: self.ordenar_coluna( self.tv, "categoria"))
-
-        
-        self.scrollbar.configure(command=self.tv.yview)
-        self.scrollbar.pack(side="right", fill="y")
-
-        self.carregar_dados_no_treeview()
-
-        self.Filtro_categoria = ctk.CTkOptionMenu(self,width=110, values=["Todos","Assinaturas","Compras","Transporte","Saúde","Alimentação","Celular","Casa","Outro"])
-        self.Filtro_categoria.place(x=158, y=400)
-        self.Filtro_categoria.set('Todos')
-
-        self.pesquisa = ctk.CTkEntry(self, width=200, placeholder_text='Pesquisa',fg_color="#252524", border_color="#3A3A3A",border_width=2)
-        self.pesquisa.place(x=278, y=400)
-
-        self.bnt_pesquisa = ctk.CTkButton(self, image= self.image_4, text="", width=25, height=25, compound="right", anchor="e", font= ('Arial', 12), command=self.pesquisar)
-        self.bnt_pesquisa.place(x=488, y=400)
-
-        self.bnt_grafico1 = ctk.CTkButton(self, text="Exibir Gráfico Mensal", width =150, command=self.mostrar_grafico1)
-        self.bnt_grafico1.place(x=188, y=440)
-
-        self.bnt_grafico2 = ctk.CTkButton(self, text="Exibir Gráfico Anual", width =150, command=self.mostrar_grafico2)
-        self.bnt_grafico2.place(x=350, y=440)
-    
-    def atualizar_config(self, _=None):
-        ano = self.config_ano.get()
-        mes = f"{self.config_mes.get()}_MES"
-        criar_db_e_tabela(ano, mes)
-        self.carregar_dados_no_treeview()
-        self.grafico1()
-
-    def fechar_tudo(self):
-        print("Fechando com segurança...")
-        try:
-            plt.close('all')  # Fecha gráficos do Matplotlib, se necessário
-            self.quit()        # Finaliza o loop do tkinter
-            self.destroy()     # Destrói a janela principal
-        except:
-            pass
-
-    def enviar(self):
-    # Função para enviar os dados para o banco de dados
-        nomeget = self.nome.get()
-        precoget = self.preco.get()
-        categoriaget = self.categoria.get()
-
-        if self.data_selecionada == "" or nomeget == "" or precoget == "" or categoriaget == "Categorias":
-            messagebox.showinfo(title="ERRO", message="Digite todos os dados")
-        else:
-            try:
-                # Converte o valor para float (substitui vírgula por ponto)
-                valor_float = float(precoget.replace(",", "."))
-            except ValueError:
-                messagebox.showinfo(title="ERRO", message="Preço inválido")
-                return
-
-            ano = self.config_ano.get()
-            mes = f"{self.config_mes.get()}_MES"
-            banco_path = STORAGE_DIR / f"fatura_{ano}.db"
-
-            conn = sqlite3.connect(banco_path)
-            cursor = conn.cursor()
-            cursor.execute(f'''
-                INSERT INTO {mes} (data, descricao, valor, categoria)
-                VALUES (?, ?, ?, ?)
-            ''', (self.data_selecionada, nomeget, valor_float, categoriaget))
-            conn.commit()
-            conn.close()
-
-            # Limpa os campos
-            self.nome.delete(0, END)
-            self.preco.delete(0, END)
-            self.categoria.set("Categorias")
-            self.botao_data.configure(text="Escolher Data")
-
-            # Atualiza a Treeview com os dados do banco
-            self.tv.delete(*self.tv.get_children())
-            self.carregar_dados_no_treeview()
-
-            self.fechar_frameAdd()
-            # Atualiza gráficos
-            self.grafico1()
-    
-    def arquivo_pdf(self):
-        ano = self.config_ano.get()
-        mes = f"{self.config_mes.get()}_MES"
-
-        caminho = filedialog.askopenfilename(
-            title="Selecione um arquivo PDF",
-            filetypes=[("Arquivos PDF", "*.pdf"), ("Todos os Arquivos", "*.*")]
-        )
-
-        if not caminho:
-            return  # ← Usuário cancelou
-
-        Tratamento_pdf.processarpdfnubank(caminho)
-
-        self.tv.delete(*self.tv.get_children())
-
-        try:
-            importar_csv_para_sqlite(ano, mes)
-            self.carregar_dados_no_treeview()
-        except Exception as e:
-            messagebox.showerror(title="Erro", message=f"Ocorreu um erro: {e}")
-
-        self.grafico1()
-
-    def deletar_item(self):
-        try:
-            itemSelecionado = self.tv.selection()
-
-            if not itemSelecionado:
-                messagebox.showinfo(title="ERRO", message="Selecione ao menos um item para deletar")
-                return
-
-            ano = self.config_ano.get()
-            mes = f"{self.config_mes.get()}_MES"
-            banco_path = STORAGE_DIR / f"fatura_{ano}.db"
-
-            conn = sqlite3.connect(banco_path)
-            cursor = conn.cursor()
-
-            for item_id in itemSelecionado:
-                cursor.execute(f"DELETE FROM {mes} WHERE id = ?", (item_id,))
-                self.tv.delete(item_id)
-
-            conn.commit()
-            conn.close()
-
-        except Exception as e:
-            messagebox.showinfo(title="ERRO", message=f"Ocorreu um erro ao deletar: {e}")
-
-        self.grafico1()
-
+class FrameEditarManager(FrameBase):
     def criar_frame_editar(self):
         self.frame_borda_editar = ctk.CTkFrame(self, fg_color="#3A3A3A", corner_radius=0)
 
@@ -463,7 +643,7 @@ class App(ctk.CTk):
 
         salvar_btn_editar = ctk.CTkButton(
             botoes_frame_editar, text="Salvar", font=("Arial", 14, "bold"),
-            width=120, height=30, command=self.salvar_edicao
+            width=120, height=30, command=self.editar_item
         )
         salvar_btn_editar.pack(side="left", padx=(0, 20))       
 
@@ -513,40 +693,23 @@ class App(ctk.CTk):
         self.frame_borda_editar.place_forget()
         self.canvas_blur.place_forget()
         self.canvas_blur.delete("all")
+
+class Utilitarios:
+    @staticmethod
+    def converter_b64(b64_string, size=(20,20)):
     
-    def salvar_edicao(self):
-        novo_nome = self.entry_nome.get()
-        novo_valor = self.entry_preco.get().replace(',', '.')
-        novo_categoria = self.menu_categoria.get()
-
-        ano = self.config_ano.get()
-        mes = f"{self.config_mes.get()}_MES"
-        banco_path = self.STORAGE_DIR / f"fatura_{ano}.db"
-
+        data = base64.b64decode(b64_string)
+        pil_img = Image.open(BytesIO(data))
+        return ctk.CTkImage(pil_img, size=size)
+    
+    def fechar_tudo(self):
+        print("Fechando com segurança...")
         try:
-            conn = sqlite3.connect(banco_path)
-            cursor = conn.cursor()
-
-            cursor.execute(f"""
-                UPDATE {mes}
-                SET data = ?, descricao = ?, valor = ?, categoria = ?
-                WHERE id = ?
-            """, (self.data_selecionada, novo_nome, novo_valor, novo_categoria, self.item_id))
-
-            conn.commit()
-            conn.close()
-
-            self.tv.item(self.item_id, values=(
-                self.data_selecionada,
-                novo_nome,
-                f"R$ {novo_valor}",
-                novo_categoria
-            ))
-
-            self.fechar_frame_editar()
-
-        except Exception as e:
-            messagebox.showerror("Erro ao salvar", f"Ocorreu um erro ao salvar a edição: {e}")
+            plt.close('all')  # Fecha gráficos do Matplotlib, se necessário
+            self.quit()        # Finaliza o loop do tkinter
+            self.destroy()     # Destrói a janela principal
+        except:
+            pass
 
     def abrir_calendario(self, botao):
         top = tk.Toplevel(self)
@@ -596,6 +759,54 @@ class App(ctk.CTk):
 
         ctk.CTkButton(top, text="Selecionar", command=confirmar_data).grid(row=1, column=0, pady=5)
 
+
+class GraficosManager:
+    def mostrar_grafico1(self):
+        if self.mostrar2:
+            if self.canvas:
+                self.canvas.get_tk_widget().destroy()
+                self.canvas = None
+            self.mostrar2 = False
+            self.bnt_grafico2.configure(text="Exibir Gráfico Anual")
+
+        if not self.mostrar1:
+            self.geometry("670x850")
+            self.graficos.grafico1()
+            self.mostrar1 = True
+            self.bnt_grafico1.configure(text="Ocultar Gráfico Mensal")
+        else:
+            self.geometry("670x480")
+            if self.canvas:
+                self.canvas.get_tk_widget().destroy()
+                self.canvas = None
+            self.mostrar1 = False
+            self.bnt_grafico1.configure(text="Exibir Gráfico Mensal")
+
+    def mostrar_grafico2(self):
+        if self.mostrar1:
+            if self.canvas:
+                self.canvas.get_tk_widget().destroy()
+                self.canvas = None
+            self.mostrar1 = False
+            self.bnt_grafico1.configure(text="Exibir Gráfico Mensal")
+
+        if not self.mostrar2:
+            self.geometry("670x850")
+            self.graficos.grafico2()
+            self.mostrar2 = True
+            self.bnt_grafico2.configure(text="Ocultar Gráfico Anual")
+        else:
+            self.geometry("670x480")
+            if self.canvas:
+                self.canvas.get_tk_widget().destroy()
+                self.canvas = None
+            self.mostrar2 = False 
+            self.bnt_grafico2.configure(text="Exibir Gráfico Anual")
+
+class Graficos:
+    def __init__(self,app):
+        self.app = app
+
     def grafico1(self):
         if hasattr(self, "canvas") and self.canvas:
             try:
@@ -603,9 +814,9 @@ class App(ctk.CTk):
             except Exception as e:
                 print(f"Erro ao remover canvas anterior: {e}")
 
-        ano = self.config_ano.get()
-        mes = f"{self.config_mes.get()}_MES"
-        banco_path = self.STORAGE_DIR / f"fatura_{ano}.db"
+        ano = self.app.config_ano.get()
+        mes = f"{self.app.config_mes.get()}_MES"
+        banco_path = self.app.STORAGE_DIR / f"fatura_{ano}.db"
 
         conn = sqlite3.connect(banco_path)
         cursor = conn.cursor()
@@ -627,7 +838,7 @@ class App(ctk.CTk):
             labels_ordenados, valores_ordenados = ["Sem dados"], [1]
 
         # Criar frame do gráfico
-        self.frame_grafico = ctk.CTkFrame(self, fg_color="transparent")
+        self.frame_grafico = ctk.CTkFrame(self.app, fg_color="transparent")
         self.frame_grafico.place(x=20, y=470)
 
         # Criar gráfico
@@ -663,17 +874,17 @@ class App(ctk.CTk):
         self.canvas.get_tk_widget().pack(fill="both", expand=True)
 
     def grafico2(self):
-        # Remove canvas anterior (se existir)
+       
         try:
             self.canvas.get_tk_widget().destroy()
         except:
             pass
 
-        ano = self.config_ano.get()
+        ano = self.app.config_ano.get()
         banco_path = STORAGE_DIR / f"fatura_{ano}.db"
 
         meses = ['JAN_MES', 'FEV_MES', 'MAR_MES', 'ABR_MES', 'MAI_MES', 'JUN_MES',
-                 'JUL_MES', 'AGO_MES', 'SET_MES', 'OUT_MES', 'NOV_MES', 'DEZ_MES']
+                    'JUL_MES', 'AGO_MES', 'SET_MES', 'OUT_MES', 'NOV_MES', 'DEZ_MES']
 
         nomes_meses = []
         totais_por_mes = []
@@ -698,7 +909,7 @@ class App(ctk.CTk):
         conn.close()
 
         # Criando o frame do gráfico
-        frame_grafico = ctk.CTkFrame(self, fg_color="transparent") 
+        frame_grafico = ctk.CTkFrame(self.app, fg_color="transparent") 
         frame_grafico.place(x=20, y=495)
 
         # Se não houver dados, exibir aviso simples
@@ -733,177 +944,8 @@ class App(ctk.CTk):
         self.canvas.draw()
         self.canvas.get_tk_widget().pack(fill="both", expand=True)
 
-    def mostrar_grafico1(self):
-        if self.mostrar2:
-            if self.canvas:
-                self.canvas.get_tk_widget().destroy()
-                self.canvas = None
-            self.mostrar2 = False
-            self.bnt_grafico2.configure(text="Exibir Gráfico Anual")
 
-        if not self.mostrar1:
-            self.geometry("670x850")
-            self.grafico1()
-            self.mostrar1 = True
-            self.bnt_grafico1.configure(text="Ocultar Gráfico Mensal")
-        else:
-            self.geometry("670x480")
-            if self.canvas:
-                self.canvas.get_tk_widget().destroy()
-                self.canvas = None
-            self.mostrar1 = False
-            self.bnt_grafico1.configure(text="Exibir Gráfico Mensal")
 
-    def mostrar_grafico2(self):
-        if self.mostrar1:
-            if self.canvas:
-                self.canvas.get_tk_widget().destroy()
-                self.canvas = None
-            self.mostrar1 = False
-            self.bnt_grafico1.configure(text="Exibir Gráfico Mensal")
-
-        if not self.mostrar2:
-            self.geometry("670x850")
-            self.grafico2()
-            self.mostrar2 = True
-            self.bnt_grafico2.configure(text="Ocultar Gráfico Anual")
-        else:
-            self.geometry("670x480")
-            if self.canvas:
-                self.canvas.get_tk_widget().destroy()
-                self.canvas = None
-            self.mostrar2 = False 
-            self.bnt_grafico2.configure(text="Exibir Gráfico Anual")
-    
-    def carregar_dados_no_treeview(self):
-        ano = self.config_ano.get()
-        mes = f"{self.config_mes.get()}_MES"
-        banco_path = self.STORAGE_DIR / f"fatura_{ano}.db"
-
-        conn = sqlite3.connect(banco_path)
-        cursor = conn.cursor()
-
-        cursor.execute(f'''
-            CREATE TABLE IF NOT EXISTS {mes} (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                data TEXT,
-                descricao TEXT,
-                valor REAL,
-                categoria TEXT
-            )
-        ''')
-
-        for item in self.tv.get_children():
-            self.tv.delete(item)
-
-        cursor.execute(f"SELECT id, data, descricao, valor, categoria FROM {mes}")
-        for linha in cursor.fetchall():
-            id_registro = linha[0]
-            valor_formatado = f"R$ {float(linha[3]):.2f}".replace('.', ',')
-            self.tv.insert("", "end", iid=id_registro, values=(linha[1], linha[2], valor_formatado, linha[4]))
-        
-        self.ordenar_coluna(self.tv, "data")
-
-        conn.close()
-
-    def dados_db(self):
-        ano = self.config_ano.get()
-        mes = f"{self.config_mes.get()}_MES"
-        banco_path = self.STORAGE_DIR / f"fatura_{ano}.db"
-
-        conn = sqlite3.connect(banco_path)
-        cursor = conn.cursor()
-
-        cursor.execute(f"SELECT data, descricao, valor, categoria FROM {mes}")
-        dados = cursor.fetchall()
-
-        conn.close()
-
-        return [
-            {
-                "data": d[0],
-                "nome": d[1],
-                "preco": f"R$ {d[2]:.2f}".replace('.', ','),
-                "categoria": d[3]
-            } for d in dados
-        ]
-    
-    def pesquisar(self):
-        dadosdb = self.dados_db()
-        texto_pesquisa = self.pesquisa.get().lower()
-        categoria_filtro = self.Filtro_categoria.get()
-
-        for item in self.tv.get_children():
-            self.tv.delete(item)
-
-        for item in dadosdb:
-            nome_pesquisa = texto_pesquisa in item["nome"].lower()
-            categoria_pesquisa = (categoria_filtro == "Todos" or item["categoria"] == categoria_filtro)
-
-            if nome_pesquisa and categoria_pesquisa:
-                self.tv.insert("", "end", values=(item["data"], item["nome"], item["preco"], item["categoria"]))
-
-    def ordenar_coluna(self, tv, col):
-        reverso = self.ordem_colunas.get(col, False)
-
-        def parse(valor):
-            if col == "preco":
-                return float(valor.replace("R$", "").replace(".", "").replace(",", "."))
-            elif col == "data":
-                try:
-                    dia, mes = valor.strip().split()
-                    return datetime(2025, self.MESES_PT[mes.upper()], int(dia))
-                except:
-                    return datetime.min
-            else:
-                return valor.lower()
-
-        dados = [(parse(tv.set(k, col)), k) for k in tv.get_children("")]
-        dados.sort(reverse=reverso)
-
-        for index, (_, k) in enumerate(dados):
-            tv.move(k, "", index)
-
-        self.ordem_colunas[col] = not reverso
-
-    def aplicar_blur(self):
-        self.update_idletasks()
-        x = self.winfo_rootx()
-        y = self.winfo_rooty()
-        largura = self.winfo_width()
-        altura = self.winfo_height()
-
-        image = ImageGrab.grab(bbox=(x, y, x + largura, y + altura))
-        image_blur = image.filter(ImageFilter.GaussianBlur(radius=5))
-
-        buf = io.BytesIO()
-        image_blur.save(buf, format="PNG")
-        buf.seek(0)
-        img = PhotoImage(data=buf.read())
-
-        return img
-
-    def adicionar_frameAdd(self):
-        self.update_idletasks()
-
-        img_blur = self.aplicar_blur()
-
-        self.canvas_blur.place(relx=0, rely=0, relwidth=1, relheight=1)
-        self.canvas_blur.create_image(0, 0, anchor="nw", image=img_blur)
-        self.canvas_blur.image = img_blur  # Mantém a referência para não perder a imagem
-
-        for widget in self.winfo_children():
-            if widget not in (self.canvas_blur, self.frame_adiconar):
-                widget.lower()
-
-        self.frame_borda_adicionar.place(x=180, y=80)
-        self.frame_adiconar.pack(padx=2, pady=2)
-        self.frame_borda_adicionar.lift()
-
-    def fechar_frameAdd(self):
-        self.frame_borda_adicionar.place_forget()
-        self.canvas_blur.place_forget()
-        self.canvas_blur.delete("all")
 
 # Configurações iniciais
 ctk.set_default_color_theme("green")

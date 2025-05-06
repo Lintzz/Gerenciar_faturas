@@ -1,6 +1,6 @@
 import sqlite3
 import csv
-from config import STORAGE_DIR
+from config.config import STORAGE_DIR
 
 def criar_db_e_tabela(ano, mes):
     nome_db = STORAGE_DIR / f"fatura_{ano}.db"

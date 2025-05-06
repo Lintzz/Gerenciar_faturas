@@ -1,0 +1,34 @@
+gerenciar_faturas/
+│
+├── src/                    # Código fonte principal
+│   ├── __init__.py
+│   ├── database/          # Módulos relacionados ao banco de dados
+│   │   ├── __init__.py
+│   │   └── database.py    # Atual BancoDados.py
+│   │
+│   ├── core/             # Lógica principal do negócio
+│   │   ├── __init__.py
+│   │   └── invoice_manager.py  # Atual gerenciador_faturas.py
+│   │
+│   ├── utils/            # Utilitários e helpers
+│   │   ├── __init__.py
+│   │   ├── pdf_handler.py     # Atual Tratamento_pdf.py
+│   │   └── image_utils.py     # Atual images.py
+│   │
+│   └── app/              # Interface da aplicação
+│       ├── __init__.py
+│       └── main.py       # Atual app.py
+│
+├── tests/                # Testes unitários e de integração
+│   └── __init__.py
+│
+├── assets/              # Recursos estáticos
+│   └── icons/
+│       └── dolar.ico
+│
+├── docs/                # Documentação
+│
+├── config/             # Arquivos de configuração
+│   └── config.py
+│
+└── README.md
